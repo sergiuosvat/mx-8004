@@ -1,5 +1,7 @@
 use crate::constants::*;
-use common::structs::{AgentDetails, JobData, MetadataEntry, ServiceConfigInput};
+use common::structs::{
+    AgentDetails, AgentListEntry, JobData, MetadataEntry, ServiceConfigEntry, ServiceConfigInput,
+};
 use identity_registry::storage::StorageModule;
 use multiversx_sc::proxy_imports::MultiValue2;
 use multiversx_sc::proxy_imports::OptionalValue;
@@ -618,6 +620,32 @@ impl AgentTestState {
             .run();
     }
 
+    /// ERC-8004 giveFeedback — populates feedback_clients. Caller must not be agent owner.
+    /// Minimal test helper: uses empty buffers for optional params. Production callers should pass full ERC-8004 fields.
+    pub fn give_feedback(
+        &mut self,
+        from: &multiversx_sc::types::TestAddress,
+        agent_nonce: u64,
+        value: i64,
+    ) {
+        self.world
+            .tx()
+            .from(*from)
+            .to(REPUTATION_SC_ADDRESS)
+            .typed(ReputationRegistryProxy)
+            .give_feedback(
+                agent_nonce,
+                value,
+                0u8,
+                ManagedBuffer::new(),
+                ManagedBuffer::new(),
+                ManagedBuffer::new(),
+                ManagedBuffer::new(),
+                ManagedBuffer::new(),
+            )
+            .run();
+    }
+
     pub fn append_response(
         &mut self,
         from: &multiversx_sc::types::TestAddress,
@@ -1179,6 +1207,30 @@ impl AgentTestState {
             .run()
     }
 
+    pub fn query_agents_page(
+        &mut self,
+        from: u64,
+        size: u64,
+    ) -> multiversx_sc::types::ManagedVec<StaticApi, AgentListEntry<StaticApi>> {
+        self.world
+            .query()
+            .to(IDENTITY_SC_ADDRESS)
+            .typed(IdentityRegistryProxy)
+            .get_agents(from, size)
+            .returns(ReturnsResult)
+            .run()
+    }
+
+    pub fn query_agent_count(&mut self) -> u64 {
+        self.world
+            .query()
+            .to(IDENTITY_SC_ADDRESS)
+            .typed(IdentityRegistryProxy)
+            .get_agent_count()
+            .returns(ReturnsResult)
+            .run()
+    }
+
     pub fn query_agent(&mut self, nonce: u64) -> AgentDetails<StaticApi> {
         self.world
             .query()
@@ -1233,6 +1285,51 @@ impl AgentTestState {
             .to(IDENTITY_SC_ADDRESS)
             .typed(IdentityRegistryProxy)
             .agent_service_config(nonce)
+            .returns(ReturnsResult)
+            .run()
+    }
+
+    pub fn query_agent_metadata_page(
+        &mut self,
+        nonce: u64,
+        from: u64,
+        size: u64,
+    ) -> multiversx_sc::types::ManagedVec<StaticApi, MetadataEntry<StaticApi>> {
+        self.world
+            .query()
+            .to(IDENTITY_SC_ADDRESS)
+            .typed(IdentityRegistryProxy)
+            .get_agent_metadata_page(nonce, from, size)
+            .returns(ReturnsResult)
+            .run()
+    }
+
+    pub fn query_agent_service_configs_page(
+        &mut self,
+        nonce: u64,
+        from: u64,
+        size: u64,
+    ) -> multiversx_sc::types::ManagedVec<StaticApi, ServiceConfigEntry<StaticApi>> {
+        self.world
+            .query()
+            .to(IDENTITY_SC_ADDRESS)
+            .typed(IdentityRegistryProxy)
+            .get_agent_service_configs_page(nonce, from, size)
+            .returns(ReturnsResult)
+            .run()
+    }
+
+    pub fn query_feedback_clients_page(
+        &mut self,
+        agent_nonce: u64,
+        from: u64,
+        size: u64,
+    ) -> multiversx_sc::types::ManagedVec<StaticApi, ManagedAddress<StaticApi>> {
+        self.world
+            .query()
+            .to(REPUTATION_SC_ADDRESS)
+            .typed(ReputationRegistryProxy)
+            .get_feedback_clients_page(agent_nonce, from, size)
             .returns(ReturnsResult)
             .run()
     }

@@ -6,9 +6,9 @@
 
 // Init:                                 1
 // Upgrade:                              1
-// Endpoints:                           16
+// Endpoints:                           20
 // Async Callback:                       1
-// Total number of exported functions:  19
+// Total number of exported functions:  23
 
 #![no_std]
 
@@ -33,9 +33,13 @@ multiversx_sc_wasm_adapter::endpoints! {
         get_agent_metadata => agent_metadata
         get_agent_service => agent_service_config
         get_agent => get_agent
+        get_agents => get_agents
+        get_agent_count => get_agent_count
         get_agent_owner => get_agent_owner
         get_metadata => get_metadata
+        get_agent_metadata_page => get_agent_metadata_page
         get_agent_service_config => get_agent_service_config
+        get_agent_service_configs_page => get_agent_service_configs_page
     )
 }
 

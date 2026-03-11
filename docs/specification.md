@@ -4,6 +4,14 @@
 
 Three smart contracts forming a decentralized agent identity, job validation, and reputation system on MultiversX. Contracts communicate via **cross-contract storage reads** (`storage_mapper_from_address`) — no async calls.
 
+### Pagination Views
+
+Paginated views (`*_page`, `get_agents`) use `from` (start index) and `size` (max items). `size` is capped at 100. Non-existent entities return empty `ManagedVec` (no error).
+
+**Order:** Iteration order is not guaranteed. `BiDiMapper` and `UnorderedSetMapper` use unordered storage; order may change when items are added or removed. Use for batch processing, not stable cursors.
+
+**Gas:** Large `from` values increase gas cost — the contract iterates over skipped items. Prefer smaller pages and avoid very large offsets.
+
 ---
 
 ## 1. Identity Registry
@@ -29,9 +37,13 @@ Manages agent identities as soulbound (non-transferable) NFTs.
 | View | Returns |
 |---|---|
 | `get_agent(nonce)` | `AgentDetails { name, public_key }` |
+| `get_agents(from, size)` | `ManagedVec<AgentListEntry>` — paginated (size capped at 100) |
+| `get_agent_count()` | `u64` — total number of agents |
 | `get_agent_owner(nonce)` | `ManagedAddress` |
 | `get_metadata(nonce, key)` | `OptionalValue<ManagedBuffer>` |
+| `get_agent_metadata_page(nonce, from, size)` | `ManagedVec<MetadataEntry>` — paginated (size capped at 100) |
 | `get_agent_service_config(nonce, service_id)` | `OptionalValue<EgldOrEsdtTokenPayment>` |
+| `get_agent_service_configs_page(nonce, from, size)` | `ManagedVec<ServiceConfigEntry>` — paginated (size capped at 100) |
 | `get_agent_token_id()` | `NonFungibleTokenMapper` (raw) |
 | `get_agent_id()` | `BiDiMapper<u64, ManagedAddress>` (raw) |
 | `get_agent_details(nonce)` | `SingleValueMapper<AgentDetails>` (raw) |
@@ -51,9 +63,9 @@ Manages agent identities as soulbound (non-transferable) NFTs.
 ### 1.4 Events
 
 - `agentRegistered(owner, nonce, AgentRegisteredEventData { name, uri })`
-- `agentUpdated(nonce)`
-- `metadataUpdated(nonce)`
-- `serviceConfigsUpdated(nonce)`
+- `agentUpdated(owner, nonce, AgentUpdatedEventData { new_name, new_uri, metadata_updated, services_updated })`
+- `metadataUpdated(owner, nonce)`
+- `serviceConfigsUpdated(owner, nonce)`
 
 ---
 
@@ -70,8 +82,8 @@ Handles job lifecycle: initialization, proof submission, ERC-8004 validation (re
 | `init_job(job_id, agent_nonce, service_id?)` | anyone, payable | Creates job with `New` status. If `service_id` provided, reads agent's service config from identity registry via cross-contract storage, validates payment token/nonce, requires `amount >= price`, and forwards payment to agent owner |
 | `submit_proof(job_id, proof)` | anyone | Sets proof data and transitions status `New -> Pending` |
 | `submit_proof_with_nft(job_id, proof)` | anyone, payable NFT | Like `submit_proof` but accepts an NFT as proof attachment |
-| `validation_request(job_id, validator_address, request_uri, request_hash)` | agent owner | ERC-8004: Nominate a validator for the job. Sets status to `ValidationRequested`. Emits `validationRequestEvent` |
-| `validation_response(request_hash, response, response_uri, response_hash, tag)` | nominated validator | ERC-8004: Validator submits a response (score 0-100). Sets status to `Verified`. Emits `validationResponseEvent` |
+| `validation_request(job_id, validator_address, request_uri, request_hash)` | agent owner | ERC-8004: Nominate a validator for the job. Sets status to `ValidationRequested`. Emits `validationRequest` |
+| `validation_response(request_hash, response, response_uri, response_hash, tag)` | nominated validator | ERC-8004: Validator submits a response (score 0-100). Sets status to `Verified`. Emits `validationResponse` |
 | `clean_old_jobs(job_ids)` | anyone | Removes jobs older than 3 days (259,200,000 ms) |
 | `set_identity_registry_address(address)` | owner only | Update identity registry address |
 
@@ -82,7 +94,8 @@ Handles job lifecycle: initialization, proof submission, ERC-8004 validation (re
 | `is_job_verified(job_id)` | `bool` |
 | `get_job_data(job_id)` | `OptionalValue<JobData>` |
 | `get_validation_status(request_hash)` | `OptionalValue<ValidationRequestData>` |
-| `get_agent_validations(agent_nonce)` | `UnorderedSetMapper<ManagedBuffer>` |
+| `get_agent_validations(agent_nonce)` | `ManagedVec<ManagedBuffer>` — all validation hashes |
+| `get_agent_validations_page(agent_nonce, from, size)` | `ManagedVec<ManagedBuffer>` — paginated (size capped at 100) |
 
 ### 2.3 Storage
 
@@ -95,8 +108,9 @@ Handles job lifecycle: initialization, proof submission, ERC-8004 validation (re
 
 ### 2.4 Events
 
-- `validationRequestEvent(job_id, agent_nonce, validator_address, request_uri, request_hash)`
-- `validationResponseEvent(request_hash, response, response_hash, tag)`
+- `jobInitialized(job_id, employer, agent_nonce, service_id)` — emitted after successful `init_job`. `service_id` is `Option<u32>` (None when omitted).
+- `validationRequest(job_id, validator_address, agent_nonce, request_hash, request_uri)`
+- `validationResponse(job_id, validator_address, agent_nonce, request_hash, ValidationRequestData)`
 
 ---
 
@@ -123,6 +137,7 @@ Collects feedback on jobs and computes on-chain reputation scores. No pre-author
 | `get_total_jobs(agent_nonce)` | `u64` |
 | `has_given_feedback(job_id)` | `bool` |
 | `get_agent_response(job_id)` | `ManagedBuffer` |
+| `get_feedback_clients_page(agent_nonce, from, size)` | `ManagedVec<ManagedAddress>` — paginated (size capped at 100) |
 | `get_validation_contract_address()` | `ManagedAddress` |
 | `get_identity_contract_address()` | `ManagedAddress` |
 
@@ -161,6 +176,17 @@ pub struct AgentDetails<M: ManagedTypeApi> {
     pub public_key: ManagedBuffer<M>,
 }
 
+pub struct AgentListEntry<M: ManagedTypeApi> {
+    pub nonce: u64,
+    pub owner: ManagedAddress<M>,
+    pub details: AgentDetails<M>,
+}
+
+pub struct ServiceConfigEntry<M: ManagedTypeApi> {
+    pub service_id: u32,
+    pub payment: EgldOrEsdtTokenPayment<M>,
+}
+
 pub struct MetadataEntry<M: ManagedTypeApi> {
     pub key: ManagedBuffer<M>,
     pub value: ManagedBuffer<M>,
@@ -176,6 +202,13 @@ pub struct ServiceConfigInput<M: ManagedTypeApi> {
 pub struct AgentRegisteredEventData<M: ManagedTypeApi> {
     pub name: ManagedBuffer<M>,
     pub uri: ManagedBuffer<M>,
+}
+
+pub struct AgentUpdatedEventData<M: ManagedTypeApi> {
+    pub new_name: ManagedBuffer<M>,
+    pub new_uri: ManagedBuffer<M>,
+    pub metadata_updated: bool,
+    pub services_updated: bool,
 }
 
 pub enum JobStatus { New, Pending, Verified, ValidationRequested }

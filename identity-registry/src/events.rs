@@ -1,6 +1,6 @@
 multiversx_sc::imports!();
 
-use crate::structs::AgentRegisteredEventData;
+use crate::structs::{AgentRegisteredEventData, AgentUpdatedEventData};
 
 #[multiversx_sc::module]
 pub trait EventsModule {
@@ -13,11 +13,24 @@ pub trait EventsModule {
     );
 
     #[event("agentUpdated")]
-    fn agent_updated_event(&self, #[indexed] nonce: u64);
+    fn agent_updated_event(
+        &self,
+        #[indexed] owner: &ManagedAddress,
+        #[indexed] nonce: u64,
+        data: AgentUpdatedEventData<Self::Api>,
+    );
 
     #[event("metadataUpdated")]
-    fn metadata_updated_event(&self, #[indexed] nonce: u64);
+    fn metadata_updated_event(
+        &self,
+        #[indexed] owner: &ManagedAddress,
+        #[indexed] nonce: u64,
+    );
 
     #[event("serviceConfigsUpdated")]
-    fn service_configs_updated_event(&self, #[indexed] nonce: u64);
+    fn service_configs_updated_event(
+        &self,
+        #[indexed] owner: &ManagedAddress,
+        #[indexed] nonce: u64,
+    );
 }

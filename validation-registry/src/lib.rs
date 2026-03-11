@@ -40,10 +40,14 @@ pub trait ValidationRegistry:
         require!(job_mapper.is_empty(), ERR_JOB_ALREADY_INITIALIZED);
 
         let caller = self.blockchain().get_caller();
+        let service_id_opt = match &service_id {
+            OptionalValue::Some(sid) => Some(*sid),
+            OptionalValue::None => None,
+        };
         job_mapper.set(JobData {
             status: JobStatus::New,
             proof: ManagedBuffer::new(),
-            employer: caller,
+            employer: caller.clone(),
             creation_timestamp: self.blockchain().get_block_timestamp_millis(),
             agent_nonce,
         });
@@ -79,6 +83,13 @@ pub trait ValidationRegistry:
                 }
             }
         }
+
+        self.job_initialized_event(
+            job_id.clone(),
+            caller.clone(),
+            agent_nonce,
+            service_id_opt,
+        );
     }
 
     #[endpoint(submit_proof)]
@@ -215,10 +226,11 @@ pub trait ValidationRegistry:
         });
 
         self.validation_request_event(
+            job_id,
             validator_address,
             job_data.agent_nonce,
-            request_uri,
             request_hash,
+            request_uri,
         );
     }
 
@@ -259,6 +271,7 @@ pub trait ValidationRegistry:
         }
 
         self.validation_response_event(
+            updated_data.job_id.clone(),
             caller,
             updated_data.agent_nonce,
             request_hash,
