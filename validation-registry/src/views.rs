@@ -46,4 +46,26 @@ pub trait ViewsModule:
         }
         result
     }
+
+    /// Paginated validation hashes for an agent. `from` = start index, `size` = max items (capped at 100).
+    #[view(get_agent_validations_page)]
+    fn get_agent_validations_page(
+        &self,
+        agent_nonce: u64,
+        from: u64,
+        size: u64,
+    ) -> ManagedVec<ManagedBuffer> {
+        let size = size.min(100) as usize;
+        let from = from.min(usize::MAX as u64) as usize;
+        let mut result = ManagedVec::new();
+        for hash in self
+            .agent_validations(agent_nonce)
+            .iter()
+            .skip(from)
+            .take(size)
+        {
+            result.push(hash);
+        }
+        result
+    }
 }

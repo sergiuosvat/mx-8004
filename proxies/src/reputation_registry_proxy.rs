@@ -298,6 +298,26 @@ where
             .original_result()
     }
 
+    /// Paginated list of client addresses who gave feedback to an agent.
+    pub fn get_feedback_clients_page<
+        Arg0: ProxyArg<u64>,
+        Arg1: ProxyArg<u64>,
+        Arg2: ProxyArg<u64>,
+    >(
+        self,
+        agent_nonce: Arg0,
+        from: Arg1,
+        size: Arg2,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedVec<Env::Api, ManagedAddress<Env::Api>>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("getFeedbackClientsPage")
+            .argument(&agent_nonce)
+            .argument(&from)
+            .argument(&size)
+            .original_result()
+    }
+
     pub fn set_identity_contract_address<
         Arg0: ProxyArg<ManagedAddress<Env::Api>>,
     >(

@@ -285,6 +285,32 @@ where
             .original_result()
     }
 
+    /// Paginated list of agents. `from` = start index, `size` = max items (capped at 100). 
+    pub fn get_agents<
+        Arg0: ProxyArg<u64>,
+        Arg1: ProxyArg<u64>,
+    >(
+        self,
+        from: Arg0,
+        size: Arg1,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedVec<Env::Api, common::structs::AgentListEntry<Env::Api>>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("get_agents")
+            .argument(&from)
+            .argument(&size)
+            .original_result()
+    }
+
+    pub fn get_agent_count(
+        self,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, u64> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("get_agent_count")
+            .original_result()
+    }
+
     pub fn get_agent_owner<
         Arg0: ProxyArg<u64>,
     >(
@@ -314,6 +340,26 @@ where
             .original_result()
     }
 
+    /// Paginated metadata entries for an agent. `from` = start index, `size` = max items (capped at 100). 
+    pub fn get_agent_metadata_page<
+        Arg0: ProxyArg<u64>,
+        Arg1: ProxyArg<u64>,
+        Arg2: ProxyArg<u64>,
+    >(
+        self,
+        nonce: Arg0,
+        from: Arg1,
+        size: Arg2,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedVec<Env::Api, common::structs::MetadataEntry<Env::Api>>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("get_agent_metadata_page")
+            .argument(&nonce)
+            .argument(&from)
+            .argument(&size)
+            .original_result()
+    }
+
     pub fn get_agent_service_config<
         Arg0: ProxyArg<u64>,
         Arg1: ProxyArg<u32>,
@@ -327,6 +373,26 @@ where
             .raw_call("get_agent_service_config")
             .argument(&nonce)
             .argument(&service_id)
+            .original_result()
+    }
+
+    /// Paginated service configs for an agent. `from` = start index, `size` = max items (capped at 100). 
+    pub fn get_agent_service_configs_page<
+        Arg0: ProxyArg<u64>,
+        Arg1: ProxyArg<u64>,
+        Arg2: ProxyArg<u64>,
+    >(
+        self,
+        nonce: Arg0,
+        from: Arg1,
+        size: Arg2,
+    ) -> TxTypedCall<Env, From, To, NotPayable, Gas, ManagedVec<Env::Api, common::structs::ServiceConfigEntry<Env::Api>>> {
+        self.wrapped_tx
+            .payment(NotPayable)
+            .raw_call("get_agent_service_configs_page")
+            .argument(&nonce)
+            .argument(&from)
+            .argument(&size)
             .original_result()
     }
 }

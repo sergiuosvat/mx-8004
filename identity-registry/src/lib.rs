@@ -135,13 +135,15 @@ pub trait IdentityRegistry:
         self.send().esdt_metadata_recreate(
             token_id.clone(),
             nonce,
-            new_name,
+            new_name.clone(),
             0,
             new_public_key,
             &ManagedBuffer::new(),
-            ManagedVec::from_single_item(new_uri),
+            ManagedVec::from_single_item(new_uri.clone()),
         );
 
+        let metadata_updated = metadata.is_some();
+        let services_updated = services.is_some();
         if let OptionalValue::Some(m) = metadata {
             self.sync_metadata(nonce, m);
         }
@@ -149,13 +151,22 @@ pub trait IdentityRegistry:
             self.sync_service_configs(nonce, configs);
         }
 
+        self.agent_updated_event(
+            &caller,
+            nonce,
+            AgentUpdatedEventData {
+                new_name,
+                new_uri,
+                metadata_updated,
+                services_updated,
+            },
+        );
+
         // Send NFT back to caller
         self.tx()
             .to(&caller)
             .single_esdt(&token_id, nonce, &BigUint::from(1u64))
             .transfer();
-
-        self.agent_updated_event(nonce);
     }
 
     /// Set or update metadata entries for an agent. O(1) per entry via MapMapper.
@@ -166,9 +177,9 @@ pub trait IdentityRegistry:
         entries: MultiValueEncodedCounted<MetadataEntry<Self::Api>>,
     ) {
         require!(!self.agent_token_id().is_empty(), ERR_TOKEN_NOT_ISSUED);
-        self.require_agent_owner(nonce);
+        let owner = self.require_agent_owner(nonce);
         self.sync_metadata(nonce, entries);
-        self.metadata_updated_event(nonce);
+        self.metadata_updated_event(&owner, nonce);
     }
 
     /// Set or update service configurations for an agent.
@@ -179,32 +190,32 @@ pub trait IdentityRegistry:
         configs: MultiValueEncodedCounted<ServiceConfigInput<Self::Api>>,
     ) {
         require!(!self.agent_token_id().is_empty(), ERR_TOKEN_NOT_ISSUED);
-        self.require_agent_owner(nonce);
+        let owner = self.require_agent_owner(nonce);
         self.sync_service_configs(nonce, configs);
-        self.service_configs_updated_event(nonce);
+        self.service_configs_updated_event(&owner, nonce);
     }
 
     /// Remove metadata entries by key.
     #[endpoint(remove_metadata)]
     fn remove_metadata(&self, nonce: u64, keys: MultiValueEncoded<ManagedBuffer>) {
         require!(!self.agent_token_id().is_empty(), ERR_TOKEN_NOT_ISSUED);
-        self.require_agent_owner(nonce);
+        let owner = self.require_agent_owner(nonce);
         let mut mapper = self.agent_metadata(nonce);
         for key in keys {
             mapper.remove(&key);
         }
-        self.metadata_updated_event(nonce);
+        self.metadata_updated_event(&owner, nonce);
     }
 
     /// Remove service configurations by service ID.
     #[endpoint(remove_service_configs)]
     fn remove_service_configs(&self, nonce: u64, service_ids: MultiValueEncoded<u32>) {
         require!(!self.agent_token_id().is_empty(), ERR_TOKEN_NOT_ISSUED);
-        self.require_agent_owner(nonce);
+        let owner = self.require_agent_owner(nonce);
         let mut mapper = self.agent_service_config(nonce);
         for sid in service_ids {
             mapper.remove(&sid);
         }
-        self.service_configs_updated_event(nonce);
+        self.service_configs_updated_event(&owner, nonce);
     }
 }

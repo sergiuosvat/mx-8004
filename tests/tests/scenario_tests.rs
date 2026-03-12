@@ -742,6 +742,45 @@ fn test_query_get_agent_view() {
 }
 
 // ============================================
+// 23a. Query Agents Paginated (get_agents, get_agent_count)
+// ============================================
+
+#[test]
+fn test_query_agents_paginated() {
+    let mut state = AgentTestState::new();
+    state.register_agent(
+        &AGENT_OWNER,
+        b"Agent1",
+        b"https://agent1.example.com",
+        b"pubkey1",
+        vec![],
+        vec![],
+    );
+    state.register_agent(
+        &CLIENT,
+        b"Agent2",
+        b"https://agent2.example.com",
+        b"pubkey2",
+        vec![],
+        vec![],
+    );
+
+    let count = state.query_agent_count();
+    assert_eq!(count, 2);
+
+    let page = state.query_agents_page(0, 10);
+    assert_eq!(page.len(), 2);
+    let names: Vec<_> = page.iter().map(|e| e.details.name.clone()).collect();
+    assert!(names.contains(&ManagedBuffer::<StaticApi>::from(b"Agent1")));
+    assert!(names.contains(&ManagedBuffer::<StaticApi>::from(b"Agent2")));
+
+    let page1 = state.query_agents_page(0, 1);
+    assert_eq!(page1.len(), 1);
+    let page2 = state.query_agents_page(1, 1);
+    assert_eq!(page2.len(), 1);
+}
+
+// ============================================
 // 23b. Query Non-Existent Agent (Agent not found guard)
 // ============================================
 
@@ -796,6 +835,110 @@ fn test_query_agent_service_bulk() {
     let bulk = state.query_agent_service_bulk(1);
     let entries: Vec<_> = bulk.into_iter().collect();
     assert_eq!(entries.len(), 2);
+}
+
+// ============================================
+// 25a. Query Agent Metadata Page (paginated)
+// ============================================
+
+#[test]
+fn test_query_agent_metadata_page() {
+    let mut state = AgentTestState::new();
+    state.register_agent(
+        &AGENT_OWNER,
+        b"TestAgent",
+        b"https://agent.example.com",
+        b"pubkey123",
+        vec![(b"key1", b"val1"), (b"key2", b"val2")],
+        vec![],
+    );
+
+    let page = state.query_agent_metadata_page(1, 0, 10);
+    assert_eq!(page.len(), 2);
+    let page1 = state.query_agent_metadata_page(1, 0, 1);
+    assert_eq!(page1.len(), 1);
+}
+
+// ============================================
+// 25b. Query Agent Service Configs Page (paginated)
+// ============================================
+
+#[test]
+fn test_query_agent_service_configs_page() {
+    let mut state = AgentTestState::new();
+    state.register_agent(
+        &AGENT_OWNER,
+        b"TestAgent",
+        b"https://agent.example.com",
+        b"pubkey123",
+        vec![],
+        vec![
+            (1u32, 100u64, b"USDC-abcdef", 0u64),
+            (2u32, 200u64, b"USDC-abcdef", 0u64),
+        ],
+    );
+
+    let page = state.query_agent_service_configs_page(1, 0, 10);
+    assert_eq!(page.len(), 2);
+}
+
+// ============================================
+// 25c. Pagination Edge Cases
+// ============================================
+
+#[test]
+fn test_pagination_edge_cases() {
+    let mut state = AgentTestState::new();
+    state.register_agent(
+        &AGENT_OWNER,
+        b"Agent1",
+        b"https://agent.example.com",
+        b"pubkey1",
+        vec![(b"k1", b"v1")],
+        vec![(1u32, 100u64, b"USDC-abcdef", 0u64)],
+    );
+
+    // from > total count (agents)
+    let page = state.query_agents_page(100, 10);
+    assert_eq!(page.len(), 0);
+
+    // size = 0
+    let page = state.query_agents_page(0, 0);
+    assert_eq!(page.len(), 0);
+
+    // size > 100 (capped at 100)
+    let page = state.query_agents_page(0, 200);
+    assert_eq!(page.len(), 1);
+
+    // Non-existent nonce for metadata
+    let page = state.query_agent_metadata_page(99, 0, 10);
+    assert_eq!(page.len(), 0);
+
+    // Non-existent nonce for service configs
+    let page = state.query_agent_service_configs_page(99, 0, 10);
+    assert_eq!(page.len(), 0);
+}
+
+// ============================================
+// 25d. Query Feedback Clients Page (paginated)
+// ============================================
+
+#[test]
+fn test_query_feedback_clients_page() {
+    let mut state = AgentTestState::new();
+    state.register_agent(
+        &AGENT_OWNER,
+        b"TestAgent",
+        b"https://agent.example.com",
+        b"pubkey123",
+        vec![],
+        vec![],
+    );
+    // ERC-8004 giveFeedback populates feedback_clients (CLIENT not agent owner)
+    state.give_feedback(&CLIENT, 1, 80);
+
+    let page = state.query_feedback_clients_page(1, 0, 10);
+    assert_eq!(page.len(), 1);
 }
 
 // ============================================

@@ -53,4 +53,21 @@ pub trait StorageModule: common::cross_contract::CrossContractModule {
     #[view(getClients)]
     #[storage_mapper("feedbackClients")]
     fn feedback_clients(&self, agent_nonce: u64) -> UnorderedSetMapper<ManagedAddress>;
+
+    /// Paginated list of client addresses who gave feedback to an agent. `from` = start index, `size` = max items (capped at 100).
+    #[view(getFeedbackClientsPage)]
+    fn get_feedback_clients_page(
+        &self,
+        agent_nonce: u64,
+        from: u64,
+        size: u64,
+    ) -> ManagedVec<ManagedAddress<Self::Api>> {
+        let size = size.min(100) as usize;
+        let from = from.min(usize::MAX as u64) as usize;
+        let mut result = ManagedVec::new();
+        for addr in self.feedback_clients(agent_nonce).iter().skip(from).take(size) {
+            result.push(addr);
+        }
+        result
+    }
 }

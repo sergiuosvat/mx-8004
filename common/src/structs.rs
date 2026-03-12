@@ -56,6 +56,17 @@ pub struct AgentDetails<M: ManagedTypeApi> {
     pub public_key: ManagedBuffer<M>,
 }
 
+/// Paginated agent entry: nonce, owner, and details.
+#[type_abi]
+#[derive(
+    TopEncode, TopDecode, ManagedVecItem, NestedEncode, NestedDecode, Clone, PartialEq, Debug,
+)]
+pub struct AgentListEntry<M: ManagedTypeApi> {
+    pub nonce: u64,
+    pub owner: ManagedAddress<M>,
+    pub details: AgentDetails<M>,
+}
+
 #[type_abi]
 #[derive(
     TopEncode, TopDecode, ManagedVecItem, NestedEncode, NestedDecode, Clone, PartialEq, Debug,
@@ -67,6 +78,16 @@ pub struct ServiceConfigInput<M: ManagedTypeApi> {
     pub nonce: u64,
 }
 
+/// Paginated service config entry: service_id and payment.
+#[type_abi]
+#[derive(
+    TopEncode, TopDecode, ManagedVecItem, NestedEncode, NestedDecode, Clone, PartialEq, Debug,
+)]
+pub struct ServiceConfigEntry<M: ManagedTypeApi> {
+    pub service_id: u32,
+    pub payment: EgldOrEsdtTokenPayment<M>,
+}
+
 #[type_abi]
 #[derive(
     TopEncode, TopDecode, ManagedVecItem, NestedEncode, NestedDecode, Clone, PartialEq, Debug,
@@ -74,4 +95,15 @@ pub struct ServiceConfigInput<M: ManagedTypeApi> {
 pub struct AgentRegisteredEventData<M: ManagedTypeApi> {
     pub name: ManagedBuffer<M>,
     pub uri: ManagedBuffer<M>,
+}
+
+#[type_abi]
+#[derive(
+    TopEncode, TopDecode, NestedEncode, NestedDecode, Clone, PartialEq, Debug,
+)]
+pub struct AgentUpdatedEventData<M: ManagedTypeApi> {
+    pub new_name: ManagedBuffer<M>,
+    pub new_uri: ManagedBuffer<M>,
+    pub metadata_updated: bool,
+    pub services_updated: bool,
 }
