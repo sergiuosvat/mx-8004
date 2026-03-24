@@ -60,6 +60,7 @@ impl CsInteract {
             .typed(IdentityRegistryProxy)
             .init()
             .code(&identity_code)
+            .code_metadata(CodeMetadata::UPGRADEABLE | CodeMetadata::READABLE)
             .returns(ReturnsNewBech32Address)
             .run()
             .await;
@@ -107,6 +108,7 @@ impl CsInteract {
             .typed(ValidationRegistryProxy)
             .init(&identity_addr)
             .code(&validation_code)
+            .code_metadata(CodeMetadata::UPGRADEABLE | CodeMetadata::READABLE)
             .returns(ReturnsNewBech32Address)
             .run()
             .await;
@@ -121,6 +123,7 @@ impl CsInteract {
             .typed(ReputationRegistryProxy)
             .init(&validation_addr, &identity_addr)
             .code(&reputation_code)
+            .code_metadata(CodeMetadata::UPGRADEABLE | CodeMetadata::READABLE)
             .returns(ReturnsNewBech32Address)
             .run()
             .await;
@@ -143,17 +146,15 @@ impl CsInteract {
         }
     }
 
-    // ── Register Agent (raw call for Counted encoding) ──
+    // ── Register Agent (counted var-args need explicit encoding) ──
 
     pub async fn register_agent(&mut self, from: &Address, name: &[u8], uri: &[u8], pubkey: &[u8]) {
         let mut args = ManagedArgBuffer::<StaticApi>::new();
         args.push_arg(ManagedBuffer::<StaticApi>::from(name));
         args.push_arg(ManagedBuffer::<StaticApi>::from(uri));
         args.push_arg(ManagedBuffer::<StaticApi>::from(pubkey));
-        // Counted metadata: 0
-        args.push_arg(0u32);
-        // Counted services: 0
-        args.push_arg(0u32);
+        args.push_arg(0usize); // metadata count
+        args.push_arg(0usize); // services count
 
         self.interactor
             .tx()
@@ -187,6 +188,7 @@ impl CsInteract {
                 value: ManagedBuffer::from(*v),
             });
         }
+
         args.push_arg(services.len());
         for (sid, price, token, nonce) in services {
             args.push_arg(ServiceConfigInput::<StaticApi> {
@@ -205,6 +207,48 @@ impl CsInteract {
             .raw_call("register_agent")
             .arguments_raw(args)
             .returns(ReturnsResultUnmanaged)
+            .run()
+            .await;
+    }
+
+    pub async fn register_agent_with_meta_expect_err(
+        &mut self,
+        from: &Address,
+        agent: (&[u8], &[u8], &[u8]),
+        metadata: &[(&[u8], &[u8])],
+        services: &[(u32, u64, &[u8], u64)],
+        err_msg: &str,
+    ) {
+        let (name, uri, pubkey) = agent;
+        let mut args = ManagedArgBuffer::<StaticApi>::new();
+        args.push_arg(ManagedBuffer::<StaticApi>::from(name));
+        args.push_arg(ManagedBuffer::<StaticApi>::from(uri));
+        args.push_arg(ManagedBuffer::<StaticApi>::from(pubkey));
+        args.push_arg(metadata.len());
+        for (k, v) in metadata {
+            args.push_arg(MetadataEntry::<StaticApi> {
+                key: ManagedBuffer::from(*k),
+                value: ManagedBuffer::from(*v),
+            });
+        }
+        args.push_arg(services.len());
+        for (sid, price, token, nonce) in services {
+            args.push_arg(ServiceConfigInput::<StaticApi> {
+                service_id: *sid,
+                price: BigUint::from(*price),
+                token: TokenId::from(*token),
+                nonce: *nonce,
+            });
+        }
+
+        self.interactor
+            .tx()
+            .from(from)
+            .to(&self.identity_addr)
+            .gas(30_000_000u64)
+            .raw_call("register_agent")
+            .arguments_raw(args)
+            .returns(ExpectMessage(err_msg))
             .run()
             .await;
     }
@@ -298,6 +342,33 @@ impl CsInteract {
             .await;
     }
 
+    pub async fn submit_proof_with_nft(
+        &mut self,
+        from: &Address,
+        job_id: &[u8],
+        proof: &[u8],
+        agent_nonce: u64,
+    ) {
+        self.interactor
+            .tx()
+            .from(from)
+            .to(&self.validation_addr)
+            .gas(30_000_000u64)
+            .typed(ValidationRegistryProxy)
+            .submit_proof_with_nft(
+                ManagedBuffer::<StaticApi>::from(job_id),
+                ManagedBuffer::<StaticApi>::from(proof),
+            )
+            .payment((
+                EsdtTokenIdentifier::from(self.agent_token_id.as_str()),
+                agent_nonce,
+                BigUint::<StaticApi>::from(1u64),
+            ))
+            .returns(ReturnsResultUnmanaged)
+            .run()
+            .await;
+    }
+
     pub async fn validation_request(
         &mut self,
         from: &Address,
@@ -378,7 +449,6 @@ impl CsInteract {
     }
 
     // ── Reputation Registry ──
-
 
     pub async fn give_feedback_simple(
         &mut self,
@@ -492,8 +562,8 @@ impl CsInteract {
         args.push_arg(ManagedBuffer::<StaticApi>::from(name));
         args.push_arg(ManagedBuffer::<StaticApi>::from(uri));
         args.push_arg(ManagedBuffer::<StaticApi>::from(pubkey));
-        args.push_arg(0u32); // metadata count
-        args.push_arg(0u32); // services count
+        args.push_arg(0usize); // metadata count
+        args.push_arg(0usize); // services count
 
         self.interactor
             .tx()
@@ -506,7 +576,6 @@ impl CsInteract {
             .run()
             .await;
     }
-
 
     pub async fn submit_proof_expect_err(
         &mut self,
