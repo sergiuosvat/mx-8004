@@ -132,6 +132,11 @@ pub trait IdentityRegistry:
         let owner = self.agents().get_value(&nonce);
         require!(caller == owner, ERR_NOT_OWNER);
 
+        let new_details = AgentDetails {
+            name: new_name.clone(),
+            public_key: new_public_key.clone(),
+        };
+
         self.send().esdt_metadata_recreate(
             token_id.clone(),
             nonce,
@@ -141,6 +146,8 @@ pub trait IdentityRegistry:
             &ManagedBuffer::new(),
             ManagedVec::from_single_item(new_uri.clone()),
         );
+
+        self.agent_details(nonce).set(&new_details);
 
         let metadata_updated = metadata.is_some();
         let services_updated = services.is_some();
