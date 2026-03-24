@@ -1,4 +1,4 @@
-// Chain-simulator E2E tests — feature-gated behind `chain-simulator-tests`.
+// Chain simulator E2E tests (feature-gated behind `chain-simulator-tests`).
 // Run with: cargo test -p mx-8004-tests --features chain-simulator-tests -- --test-threads=1
 //
 // These tests require a running MultiversX chain simulator on http://localhost:8085
@@ -66,19 +66,19 @@ mod cs {
         let _ = env_logger::try_init();
         let mut interact = CsInteract::new().await;
 
+        let worker = interact.worker.clone();
         let bob = interact.agent_owner.clone();
         interact
             .register_agent(
                 &bob,
                 b"TestAgent",
                 b"https://agent.example.com",
-                b"pubkey123",
+                worker.as_ref(),
             )
             .await;
 
         let agent_nonce = 1u64;
         let carol = interact.client.clone();
-        let worker = interact.worker.clone();
 
         interact.init_job(&carol, b"job-001", agent_nonce).await;
         interact
@@ -108,36 +108,28 @@ mod cs {
 
     /// Full lifecycle including reputation feedback.
     ///
-    /// This test is ignored by default because the reputation-registry uses
-    /// `storage_mapper_from_address` (ManagedStorageReadFromAddress VM hook)
-    /// to read job data from the validation-registry. This VM hook only works
-    /// when both contracts are deployed in the same shard. On the chain simulator
-    /// with 3 shards, contracts deployed at different nonces land in different
-    /// shards non-deterministically, causing "Job not found" errors.
-    ///
-    /// The full lifecycle (including feedback) is covered by the 32 scenario tests.
-    ///
-    /// To run: cargo test -p mx-8004-tests --features chain-simulator-tests -- --ignored --test-threads=1
+    /// Runs full CS flow:
+    /// register agent -> init_job -> submit_proof -> validation_request/response
+    /// -> give_feedback_simple -> append_response.
     #[tokio::test]
     #[serial]
-    #[ignore = "Requires same-shard deployment; storage_mapper_from_address is shard-local"]
     async fn test_full_lifecycle_with_feedback_cs() {
         let _ = env_logger::try_init();
         let mut interact = CsInteract::new().await;
 
+        let worker = interact.worker.clone();
         let bob = interact.agent_owner.clone();
         interact
             .register_agent(
                 &bob,
                 b"TestAgent",
                 b"https://agent.example.com",
-                b"pubkey123",
+                worker.as_ref(),
             )
             .await;
 
         let agent_nonce = 1u64;
         let carol = interact.client.clone();
-        let worker = interact.worker.clone();
 
         // Job lifecycle
         interact.init_job(&carol, b"job-001", agent_nonce).await;
@@ -237,20 +229,20 @@ mod cs {
         let _ = env_logger::try_init();
         let mut interact = CsInteract::new().await;
 
+        let worker = interact.worker.clone();
         let bob = interact.agent_owner.clone();
         interact
             .register_agent(
                 &bob,
                 b"TestAgent",
                 b"https://agent.example.com",
-                b"pubkey123",
+                worker.as_ref(),
             )
             .await;
 
         let carol = interact.client.clone();
         interact.init_job(&carol, b"job-001", 1u64).await;
 
-        let worker = interact.worker.clone();
         interact
             .submit_proof(&worker, b"job-001", b"proof-data")
             .await;
@@ -263,7 +255,7 @@ mod cs {
                 b"req-uri",
                 b"req-hash",
                 4,
-                "Only the agent owner can request validation",
+                "Only the agent owner can perform this action",
             )
             .await;
 
@@ -317,8 +309,8 @@ mod cs {
         println!("Duplicate job init correctly rejected");
     }
 
-    /// Test: register agent with a free service (price=0, service_id=1),
-    /// then init_job with that service_id but NO payment → should succeed.
+    /// Test: registering a free service (price = 0, service_id = 1)
+    /// is rejected with "zero value not allowed".
     #[tokio::test]
     #[serial]
     async fn test_init_job_free_service_cs() {
@@ -326,29 +318,20 @@ mod cs {
         let mut interact = CsInteract::new().await;
 
         let bob = interact.agent_owner.clone();
-        // Register agent with service_id=1, price=0, EGLD, nonce=0
         interact
-            .register_agent_with_meta(
+            .register_agent_with_meta_expect_err(
                 &bob,
-                b"FreeBot",
-                b"https://free.example.com",
-                b"pubkey123",
+                (b"FreeBot", b"https://free.example.com", b"pubkey123"),
                 &[],
-                &[(1, 0, b"EGLD-000000", 0)], // free service
+                &[(1, 0, b"EGLD-000000", 0)],
+                "zero value not allowed",
             )
             .await;
-
-        let carol = interact.client.clone();
-        // Init job with service_id=1 (free) and no payment → should succeed
-        interact
-            .init_job_with_free_service(&carol, b"free-job-001", 1u64, 1)
-            .await;
-
-        println!("Free service job init succeeded without payment");
+        println!("Zero-price service config correctly rejected");
     }
 
-    /// Test: register agent with a paid service (1 EGLD, service_id=1),
-    /// then init_job with that service_id but NO payment → ERR_INSUFFICIENT_PAYMENT.
+    /// Test: register agent with a paid service (1 EGLD, service_id = 1),
+    /// then call init_job with that service_id but no payment -> ERR_INSUFFICIENT_PAYMENT.
     #[tokio::test]
     #[serial]
     async fn test_init_job_no_payment_for_paid_service_cs() {
@@ -356,7 +339,7 @@ mod cs {
         let mut interact = CsInteract::new().await;
 
         let bob = interact.agent_owner.clone();
-        // Register agent with service_id=1, price=1 EGLD
+        // Register agent with service_id = 1, price = 1 EGLD.
         interact
             .register_agent_with_meta(
                 &bob,
@@ -369,7 +352,7 @@ mod cs {
             .await;
 
         let carol = interact.client.clone();
-        // Init job with service_id=1 but NO payment → should fail
+        // Init job with service_id = 1 but no payment -> should fail.
         interact
             .init_job_with_free_service_expect_err(
                 &carol,
